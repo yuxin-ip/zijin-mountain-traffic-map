@@ -29,6 +29,11 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      - name: Prepare project-site paths
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          mv "dist/client/$repo_name/_next" "dist/client/_next"
+          rmdir "dist/client/$repo_name"
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
