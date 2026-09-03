@@ -123,6 +123,17 @@ const VEHICLE_OPTIONS: Array<{
   { value: 'bike', label: '普通自行车', icon: Bike },
 ];
 
+const LANDMARKS: Array<{ name: string; point: [number, number]; kind: string }> = [
+  { name: '明孝陵', point: [32.0575, 118.836], kind: '景点' },
+  { name: '美龄宫', point: [32.0492, 118.8405], kind: '景点' },
+  { name: '中山陵', point: [32.0618, 118.8484], kind: '景点' },
+  { name: '音乐台', point: [32.0594, 118.8508], kind: '景点' },
+  { name: '灵谷寺', point: [32.0572, 118.8675], kind: '景点' },
+  { name: '钟山体育运动公园', point: [32.0492, 118.8704], kind: '地标' },
+  { name: '四方城', point: [32.0485, 118.8371], kind: '路口' },
+  { name: '中山门大街', point: [32.0416, 118.839], kind: '入口方向' },
+];
+
 function isControlled(element: OverpassElement) {
   const name = element.tags?.name ?? '';
   if (CONTROLLED_NAMES.has(name)) return true;
@@ -309,15 +320,54 @@ export default function Home() {
         attributionControl: false,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors',
-      }).addTo(map);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
-      L.control
-        .attribution({ position: 'bottomleft', prefix: false })
-        .addAttribution('&copy; OpenStreetMap')
-        .addTo(map);
+      L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+
+      const labelledRoads = new Set<string>();
+      FEATURES.forEach((feature) => {
+        L.polyline(feature.geometry, {
+          color: '#31475a',
+          weight: 2,
+          opacity: 0.72,
+          dashArray: feature.approximate ? '4 7' : undefined,
+          interactive: false,
+        }).addTo(map);
+
+        if (!labelledRoads.has(feature.name)) {
+          labelledRoads.add(feature.name);
+          const middle = feature.geometry[Math.floor(feature.geometry.length / 2)];
+          L.marker(middle, {
+            interactive: false,
+            icon: L.divIcon({
+              className: 'road-name-marker',
+              html: `<span>${feature.name.replace(' · 其他路段', '')}</span>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            }),
+          }).addTo(map);
+        }
+      });
+
+      LANDMARKS.forEach((landmark) => {
+        L.circleMarker(landmark.point, {
+          radius: 4,
+          weight: 2,
+          color: '#d8e7f3',
+          fillColor: landmark.kind === '景点' ? '#ffbf47' : '#5fc8ff',
+          fillOpacity: 1,
+          interactive: false,
+        })
+          .bindTooltip(
+            `<span class="landmark-kind">${landmark.kind}</span><strong>${landmark.name}</strong>`,
+            {
+              permanent: true,
+              direction: 'right',
+              offset: [7, 0],
+              className: 'landmark-label',
+            },
+          )
+          .addTo(map);
+      });
 
       mapRef.current = map;
       layerRef.current = L.layerGroup().addTo(map);
@@ -398,7 +448,7 @@ export default function Home() {
                 钟山景区车辆通行图
               </h1>
               <p className="hidden text-xs text-slate-400 sm:block">
-                2025-10-01 起实施 · 按车辆与时段查看
+                内置矢量地图 · 中国大陆可直接显示
               </p>
             </div>
           </div>
@@ -478,6 +528,10 @@ export default function Home() {
       <div className="mx-auto grid max-w-[1680px] lg:h-[calc(100vh-180px)] lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_390px]">
         <section className="relative min-h-[56vh] overflow-hidden border-white/10 lg:min-h-0 lg:border-r">
           <div ref={mapNodeRef} className="absolute inset-0 bg-[#0b1623]" />
+
+          <div className="pointer-events-none absolute bottom-3 left-3 z-[450] rounded-lg border border-[#35e5be]/20 bg-[#08131f]/90 px-2.5 py-1.5 text-[11px] font-medium text-[#68ebcd] shadow-lg lg:bottom-auto lg:left-auto lg:right-5 lg:top-5">
+            内置矢量底图 · 无需外部地图服务
+          </div>
 
           <div className="pointer-events-none absolute left-3 top-3 z-[500] max-w-[calc(100%-24px)] rounded-2xl border border-white/10 bg-[#08131f]/92 p-3 shadow-2xl backdrop-blur md:left-5 md:top-5 md:p-4">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
@@ -639,7 +693,7 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <p>
-                本图是出行辅助，不替代交警指挥。道路线位来自 OpenStreetMap；灵谷寺西路为示意线位。
+                本图是出行辅助，不替代交警指挥。道路线位基于 OpenStreetMap 数据内置生成；灵谷寺西路为示意线位。
               </p>
             </div>
           </footer>

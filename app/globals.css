@@ -107,11 +107,12 @@ a {
 
 .leaflet-container {
   font-family: var(--font-sans-app);
-  background: #0b1623;
-}
-
-.leaflet-tile-pane {
-  filter: saturate(0.4) brightness(0.53) contrast(1.12) hue-rotate(174deg);
+  background-color: #0b1623;
+  background-image:
+    radial-gradient(circle at 68% 30%, rgba(30, 108, 90, 0.16), transparent 31%),
+    linear-gradient(rgba(119, 164, 190, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(119, 164, 190, 0.055) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
 }
 
 .leaflet-control-zoom a {
@@ -124,15 +125,50 @@ a {
   background: #132638 !important;
 }
 
-.leaflet-control-attribution {
-  border-radius: 0 8px 0 0;
-  background: rgba(8, 19, 31, 0.8) !important;
-  color: #718096;
-  font-size: 10px !important;
+.leaflet-control-scale-line {
+  border-color: rgba(174, 197, 214, 0.5) !important;
+  border-top: 0 !important;
+  background: rgba(8, 19, 31, 0.76) !important;
+  color: #9db2c3 !important;
+  font-size: 10px;
 }
 
-.leaflet-control-attribution a {
-  color: #8ca8be;
+.road-name-marker {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.road-name-marker span {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  border-radius: 5px;
+  background: rgba(7, 17, 29, 0.78);
+  box-shadow: 0 0 0 1px rgba(132, 167, 190, 0.12);
+  color: rgba(202, 220, 232, 0.72);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  white-space: nowrap;
+}
+
+.landmark-label {
+  border: 0 !important;
+  background: rgba(8, 19, 31, 0.88) !important;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18) !important;
+  color: #e5eef5 !important;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 4px 6px !important;
+}
+
+.landmark-label::before {
+  border-right-color: rgba(8, 19, 31, 0.88) !important;
+}
+
+.landmark-kind {
+  margin-right: 4px;
+  color: #7f98aa;
+  font-size: 9px;
 }
 
 .road-tooltip {
@@ -150,8 +186,8 @@ a {
 }
 
 @media (max-width: 1023px) {
-  .leaflet-control-attribution {
-    display: none;
+  .road-name-marker span {
+    font-size: 9px;
   }
 }
 
