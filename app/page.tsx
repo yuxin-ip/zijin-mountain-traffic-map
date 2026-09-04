@@ -124,13 +124,14 @@ const VEHICLE_OPTIONS: Array<{
 ];
 
 const LANDMARKS: Array<{ name: string; point: [number, number]; kind: string }> = [
-  { name: '明孝陵', point: [32.0575, 118.836], kind: '景点' },
-  { name: '美龄宫', point: [32.0492, 118.8405], kind: '景点' },
-  { name: '中山陵', point: [32.0618, 118.8484], kind: '景点' },
-  { name: '音乐台', point: [32.0594, 118.8508], kind: '景点' },
-  { name: '灵谷寺', point: [32.0572, 118.8675], kind: '景点' },
-  { name: '钟山体育运动公园', point: [32.0492, 118.8704], kind: '地标' },
-  { name: '四方城', point: [32.0485, 118.8371], kind: '路口' },
+  // OSM feature bounds centres (WGS84), checked against the bundled basemap.
+  { name: '明孝陵', point: [32.062083, 118.834675], kind: '景点' },
+  { name: '美龄宫', point: [32.047681, 118.841468], kind: '景点' },
+  { name: '中山陵', point: [32.061433, 118.848434], kind: '景点' },
+  { name: '音乐台', point: [32.057315, 118.850252], kind: '景点' },
+  { name: '灵谷寺', point: [32.057678, 118.862873], kind: '景点' },
+  { name: '钟山体育运动公园', point: [32.047525, 118.867845], kind: '地标' },
+  { name: '四方城', point: [32.048829, 118.838219], kind: '路口' },
   { name: '中山门大街', point: [32.0416, 118.839], kind: '入口方向' },
 ];
 
@@ -329,7 +330,7 @@ export default function Home() {
                 钟山景区车辆通行图
               </h1>
               <p className="hidden text-xs text-slate-400 sm:block">
-                内置矢量地图 · 无需外部地图图块
+                地理底图已内置 · 山林、水面、街道与建筑
               </p>
             </div>
           </div>
@@ -447,12 +448,13 @@ export default function Home() {
                 <span>{timeMode === 'offpeak' ? '现场为准' : '未作特别限制'}</span>
               </div>
             </div>
+            <p className="mt-2 border-t border-white/10 pt-2 text-[11px] text-slate-400">灰色街道、细虚线步道是地理背景，不表示允许车辆通行。</p>
           </div>
 
           <button
             type="button"
             onClick={resetMap}
-            className="absolute bottom-24 right-3 z-[500] grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-[#08131f]/92 text-slate-200 shadow-xl transition hover:bg-[#132638] lg:bottom-24 lg:right-3"
+            className="absolute bottom-[120px] right-3 z-[500] grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-[#08131f]/92 text-slate-200 shadow-xl transition hover:bg-[#132638] lg:right-3"
             aria-label="恢复地图全景"
           >
             <LocateFixed className="h-5 w-5" />
@@ -581,7 +583,7 @@ export default function Home() {
             <div className="flex items-start gap-2">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <p>
-                本图是出行辅助，不替代交警指挥。道路线位基于 OpenStreetMap 数据内置生成；灵谷寺西路为示意线位。
+                本图是出行辅助，不替代交警指挥。地理底图与道路线位基于 OpenStreetMap 数据内置生成（底图数据日期：2026-09-04）；灵谷寺西路为示意线位。背景街道与步道未逐一核定通行权限，不用于导航。
               </p>
             </div>
           </footer>

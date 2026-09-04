@@ -18,20 +18,28 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       paths: node.querySelectorAll('.traffic-road').length,
       labels: node.querySelectorAll('[data-label-kind]').length,
       junctions: node.querySelectorAll('[data-testid="junction-dot"]').length,
+      baseKinds: [...new Set([...node.querySelectorAll('[data-base-kind]')].map(n => n.dataset.baseKind))],
+      baseFeatures: [...node.querySelectorAll('[data-base-kind]')].reduce((sum, n) => sum + Number(n.dataset.featureCount), 0),
       box: { width: node.clientWidth, height: node.clientHeight },
       view: node.querySelector('svg').getAttribute('viewBox'),
     }));
     const overview = await state();
     assert(overview.paths >= 50 && overview.box.height > 300, 'Road geometry must render in a nonzero map');
     assert.equal(overview.level, '0');
+    for (const kind of ['forest', 'water', 'major', 'street']) assert(overview.baseKinds.includes(kind), `First render is missing basemap ${kind}`);
+    assert(!overview.baseKinds.includes('building'), 'Building detail should wait until close-up');
     await page.getByRole('button', { name: '放大地图', exact: true }).click();
     await page.getByRole('button', { name: '放大地图', exact: true }).click();
     const streets = await state();
     assert.equal(streets.level, '1');
+    assert(streets.baseKinds.includes('trail') && streets.baseKinds.includes('service'), 'Street zoom must reveal real paths and service roads');
+    assert(streets.baseFeatures > overview.baseFeatures, 'Zoom must add geographic features, not only enlarge traffic lines');
     await page.getByRole('button', { name: '放大地图', exact: true }).click();
     const detail = await state();
     assert.equal(detail.level, '2');
     assert(detail.junctions > 0, 'Close-up should reveal intersections');
+    assert(detail.baseKinds.includes('building') && detail.baseKinds.includes('steps'), 'Close-up must include building outlines and steps');
+    assert(detail.baseFeatures > streets.baseFeatures, 'Detail zoom must add geographic features');
     await page.screenshot({ path: 'artifacts/map-detail.png', fullPage: true });
     await page.getByRole('button', { name: '缩小地图', exact: true }).click();
     assert.equal((await state()).level, '1');
@@ -87,6 +95,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const staticPage = await staticContext.newPage();
     await staticPage.goto(url, { waitUntil: 'domcontentloaded' });
     assert(await staticPage.locator('.traffic-road').count() >= 50, 'The map must be visible even before JS initializes');
+    assert(await staticPage.locator('[data-base-kind="forest"] path').count() > 0, 'Forest geometry must exist without JavaScript');
+    assert(await staticPage.locator('[data-base-kind="water"] path').count() > 0, 'Water geometry must exist without JavaScript');
     await staticContext.close();
     assert.equal(errors.length, 0, JSON.stringify(errors));
     console.log(JSON.stringify({ result: 'PASS', overview, streets, detail, mobile, errors, requests }, null, 2));

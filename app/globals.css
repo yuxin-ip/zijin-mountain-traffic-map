@@ -109,18 +109,20 @@ a {
 .traffic-map > svg { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .traffic-map > svg:active { cursor: grabbing; }
 .traffic-road { pointer-events: none; }
-.map-level { position: absolute; bottom: 18px; left: 18px; color: #65dfc3; background: #08131fee; border: 1px solid #254353; border-radius: 10px; padding: 8px 12px; font-size: 14px; pointer-events: none; }
+.map-level { position: absolute; bottom: 34px; left: 18px; color: #65dfc3; background: #08131fee; border: 1px solid #254353; border-radius: 10px; padding: 8px 12px; font-size: 14px; pointer-events: none; }
+.map-attribution { position: absolute; bottom: 0; left: 0; right: 0; display: flex; gap: 12px; padding: 3px 10px; background: #08131fe8; font-size: 11px; color: #b2c5cf; }
+.map-attribution a { text-decoration: underline; }
 .map-level span { display: block; margin-top: 3px; font-size: 12px; color: #9eb3c4; }
 .map-compass { position: absolute; right: 20px; top: 86px; display: grid; text-align: center; color: #adc6d6; font-size: 24px; pointer-events: none; }
 .map-compass span { font-size: 12px; }
-.map-zoom-controls { position: absolute; bottom: 16px; right: 12px; display: grid; border: 1px solid #345064; border-radius: 12px; background: #08131fee; overflow: hidden; }
+.map-zoom-controls { position: absolute; bottom: 32px; right: 12px; display: grid; border: 1px solid #345064; border-radius: 12px; background: #08131fee; overflow: hidden; }
 .map-zoom-controls button { width: 42px; height: 38px; font-size: 25px; cursor: pointer; }
 .map-zoom-controls button:hover { background: #193046; }
 .map-zoom-controls button + button { border-top: 1px solid #345064; }
-.map-scale { position: absolute; bottom: 22px; right: 78px; color: #8faabd; font-size: 11px; pointer-events: none; }
+.map-scale { position: absolute; bottom: 38px; right: 78px; color: #c1d4dd; background: #08131fb0; padding: 4px; font-size: 11px; pointer-events: none; }
 .map-scale > span { display: block; height: 5px; border: 1px solid #829eb3; border-top: 0; margin-bottom: 4px; }
 .map-no-script { position: absolute; top: 90px; left: 16px; background: #172938; padding: 10px; font-size: 14px; }
-@media (max-width: 1023px) { .map-panel { height: 62dvh; min-height: 430px; } .map-level { left: 10px; bottom: 12px; } .map-scale { display: none; } }
+@media (max-width: 1023px) { .map-panel { height: 62dvh; min-height: 430px; } .map-level { left: 10px; bottom: 32px; } .map-scale { display: none; } .map-attribution span { display: none; } }
 
 .leaflet-container {
   font-family: var(--font-sans-app);
