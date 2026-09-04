@@ -126,5 +126,8 @@ const data = {
 };
 for (const kind of ['forest', 'water', 'building', 'major', 'street', 'trail']) assert(data.layers.some(l => l.kind === kind && l.count > 10), `Missing ${kind}`);
 fs.mkdirSync('public/data', { recursive: true });
+// Keep the importable module outside public/ (Vite reserves public/ for URLs).
+// Publish an identical downloadable copy to satisfy the data licence.
+fs.writeFileSync('app/data/basemap.json', JSON.stringify(data));
 fs.writeFileSync('public/data/basemap.json', JSON.stringify(data));
 console.log(JSON.stringify({ bytes: fs.statSync('public/data/basemap.json').size, layers: data.layers.map(({ d, ...l }) => l), labels: data.labels.length, timestamp: data.timestamp }, null, 2));

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import data from '@/public/data/basemap.json';
+import data from '@/app/data/basemap.json';
 
 // The geometry is bundled with the site, including the first HTML render.
 // No tile service, API key, geocoding request, or coordinate conversion service.
