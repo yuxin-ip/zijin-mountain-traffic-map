@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type * as Leaflet from 'leaflet';
+import { useMemo, useRef, useState } from 'react';
+import { TrafficMap, type TrafficMapHandle } from '@/components/traffic-map';
 import {
   Bike,
   CarFront,
@@ -227,7 +227,7 @@ function getAccessStatus(
 }
 
 function roadReason(feature: RoadFeature, status: AccessStatus, vehicle: VehicleMode) {
-  if (feature.category === 'pedestrian') {
+  if (feature.category === 'pedestrian' && status !== 'onsite') {
     return '步行道：节假日、双休日禁止所有车辆；工作日仅景区接驳车和残疾人机动轮椅车可通行。';
   }
   if (status === 'onsite') {
@@ -261,11 +261,7 @@ export default function Home() {
   const [timeMode, setTimeMode] = useState<TimeMode>('weekday');
   const [vehicleMode, setVehicleMode] = useState<VehicleMode>('ebike');
   const [selectedRoad, setSelectedRoad] = useState<RoadFeature | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const mapNodeRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<Leaflet.Map | null>(null);
-  const leafletRef = useRef<typeof Leaflet | null>(null);
-  const layerRef = useRef<Leaflet.LayerGroup | null>(null);
+  const mapRef = useRef<TrafficMapHandle>(null);
 
   const activeTime = TIME_OPTIONS.find((option) => option.value === timeMode)!;
   const activeVehicle = VEHICLE_OPTIONS.find(
@@ -305,129 +301,14 @@ export default function Home() {
     );
   }, [roadGroups]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void import('leaflet').then((L) => {
-      if (cancelled || !mapNodeRef.current || mapRef.current) return;
-      leafletRef.current = L;
-      const map = L.map(mapNodeRef.current, {
-        center: [32.0505, 118.8485],
-        zoom: 14,
-        minZoom: 13,
-        maxZoom: 18,
-        zoomControl: false,
-        attributionControl: false,
-      });
-
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-      L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
-
-      const labelledRoads = new Set<string>();
-      FEATURES.forEach((feature) => {
-        L.polyline(feature.geometry, {
-          color: '#31475a',
-          weight: 2,
-          opacity: 0.72,
-          dashArray: feature.approximate ? '4 7' : undefined,
-          interactive: false,
-        }).addTo(map);
-
-        if (!labelledRoads.has(feature.name)) {
-          labelledRoads.add(feature.name);
-          const middle = feature.geometry[Math.floor(feature.geometry.length / 2)];
-          L.marker(middle, {
-            interactive: false,
-            icon: L.divIcon({
-              className: 'road-name-marker',
-              html: `<span>${feature.name.replace(' · 其他路段', '')}</span>`,
-              iconSize: [0, 0],
-              iconAnchor: [0, 0],
-            }),
-          }).addTo(map);
-        }
-      });
-
-      LANDMARKS.forEach((landmark) => {
-        L.circleMarker(landmark.point, {
-          radius: 4,
-          weight: 2,
-          color: '#d8e7f3',
-          fillColor: landmark.kind === '景点' ? '#ffbf47' : '#5fc8ff',
-          fillOpacity: 1,
-          interactive: false,
-        })
-          .bindTooltip(
-            `<span class="landmark-kind">${landmark.kind}</span><strong>${landmark.name}</strong>`,
-            {
-              permanent: true,
-              direction: 'right',
-              offset: [7, 0],
-              className: 'landmark-label',
-            },
-          )
-          .addTo(map);
-      });
-
-      mapRef.current = map;
-      layerRef.current = L.layerGroup().addTo(map);
-      setMapReady(true);
-    });
-
-    return () => {
-      cancelled = true;
-      mapRef.current?.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const L = leafletRef.current;
-    const map = mapRef.current;
-    const layerGroup = layerRef.current;
-    if (!L || !map || !layerGroup || !mapReady) return;
-
-    layerGroup.clearLayers();
-    FEATURES.forEach((feature) => {
-      const status = getAccessStatus(feature, timeMode, vehicleMode);
-      const meta = STATUS_META[status];
-
-      L.polyline(feature.geometry, {
-        color: meta.halo,
-        weight: 11,
-        opacity: 0.72,
-        interactive: false,
-      }).addTo(layerGroup);
-
-      const roadLine = L.polyline(feature.geometry, {
-        color: meta.color,
-        weight: selectedRoad?.key === feature.key ? 7 : 5,
-        opacity: feature.approximate ? 0.78 : 0.96,
-        dashArray: feature.approximate ? '7 8' : undefined,
-        lineCap: 'round',
-        lineJoin: 'round',
-      }).addTo(layerGroup);
-
-      roadLine.bindTooltip(
-        `<strong>${feature.name}</strong><br>${meta.label}${feature.approximate ? '<br><span>虚线为示意线位</span>' : ''}`,
-        { sticky: true, className: 'road-tooltip' },
-      );
-      roadLine.on('click', () => setSelectedRoad(feature));
-    });
-  }, [mapReady, selectedRoad, timeMode, vehicleMode]);
-
   function focusRoad(feature: RoadFeature) {
     setSelectedRoad(feature);
-    const L = leafletRef.current;
-    if (!L || !mapRef.current) return;
-    mapRef.current.fitBounds(L.latLngBounds(feature.geometry), {
-      padding: [80, 80],
-      maxZoom: 16,
-    });
+    const related = FEATURES.filter(road => road.name === feature.name && road.detail === feature.detail);
+    mapRef.current?.focus(related.flatMap(road => road.geometry));
   }
 
   function resetMap() {
-    mapRef.current?.setView([32.0505, 118.8485], 14);
+    mapRef.current?.reset();
     setSelectedRoad(null);
   }
 
@@ -448,7 +329,7 @@ export default function Home() {
                 钟山景区车辆通行图
               </h1>
               <p className="hidden text-xs text-slate-400 sm:block">
-                内置矢量地图 · 中国大陆可直接显示
+                内置矢量地图 · 无需外部地图图块
               </p>
             </div>
           </div>
@@ -525,13 +406,20 @@ export default function Home() {
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-[1680px] lg:h-[calc(100vh-180px)] lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_390px]">
-        <section className="relative min-h-[56vh] overflow-hidden border-white/10 lg:min-h-0 lg:border-r">
-          <div ref={mapNodeRef} className="absolute inset-0 bg-[#0b1623]" />
+      <div className="mx-auto grid max-w-[1680px] lg:h-[calc(100dvh-180px)] lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_390px]">
+        <section className="map-panel relative min-h-[56vh] overflow-hidden border-white/10 lg:min-h-0 lg:border-r">
+          <TrafficMap
+            ref={mapRef}
+            roads={FEATURES.map(feature => ({
+              ...feature,
+              color: STATUS_META[getAccessStatus(feature, timeMode, vehicleMode)].color,
+              status: STATUS_META[getAccessStatus(feature, timeMode, vehicleMode)].label,
+            }))}
+            landmarks={LANDMARKS}
+            selectedKey={selectedRoad?.key}
+            onSelect={key => setSelectedRoad(FEATURES.find(feature => feature.key === key) ?? null)}
+          />
 
-          <div className="pointer-events-none absolute bottom-3 left-3 z-[450] rounded-lg border border-[#35e5be]/20 bg-[#08131f]/90 px-2.5 py-1.5 text-[11px] font-medium text-[#68ebcd] shadow-lg lg:bottom-auto lg:left-auto lg:right-5 lg:top-5">
-            内置矢量底图 · 无需外部地图服务
-          </div>
 
           <div className="pointer-events-none absolute left-3 top-3 z-[500] max-w-[calc(100%-24px)] rounded-2xl border border-white/10 bg-[#08131f]/92 p-3 shadow-2xl backdrop-blur md:left-5 md:top-5 md:p-4">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
@@ -564,7 +452,7 @@ export default function Home() {
           <button
             type="button"
             onClick={resetMap}
-            className="absolute bottom-24 right-3 z-[500] grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-[#08131f]/92 text-slate-200 shadow-xl transition hover:bg-[#132638] lg:bottom-5 lg:right-14"
+            className="absolute bottom-24 right-3 z-[500] grid h-10 w-10 place-items-center rounded-xl border border-white/15 bg-[#08131f]/92 text-slate-200 shadow-xl transition hover:bg-[#132638] lg:bottom-24 lg:right-3"
             aria-label="恢复地图全景"
           >
             <LocateFixed className="h-5 w-5" />
@@ -667,7 +555,7 @@ export default function Home() {
                         )}
                       </span>
                       <span className={`mt-0.5 block text-xs ${meta.text}`}>
-                        {meta.short}
+                        {status === 'exclusive' && vehicleMode === 'bike' ? '自行车可进' : meta.short}
                       </span>
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300" />
