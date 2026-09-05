@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { BaseMap, baseLabels, baseBounds } from './base-map';
 
 type Point = [number, number];
@@ -17,6 +17,7 @@ const HOME: View = { x: 0, y: -2100, width: 8800, height: 6500 };
 const project = ([lat, lon]: Point): Point => [(lon - 118.8) * 94300, (32.07 - lat) * 111320];
 const mainRoads = new Set(['陵园路 · 步行道', '博爱路', '紫金山路', '灵谷寺路', '明陵路']);
 const mainPlaces = new Set(['明孝陵', '中山陵', '灵谷寺']);
+const OVERSCAN = 220;
 
 function homeView(size: Size): View {
   const width = Math.max(HOME.width, HOME.height * size.width / size.height) * 1.08;
@@ -41,6 +42,8 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
 }) {
   const root = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const snapshotReady = useRef(false);
   const [size, setSize] = useState<Size>({ width: 1000, height: 620 });
   const [view, setView] = useState<View>(() => homeView({ width: 1000, height: 620 }));
   const [ready, setReady] = useState(false);
@@ -48,27 +51,103 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
   const sizeRef = useRef(size);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef({ distance: 0, road: '' });
+  const renderedView = useRef(view);
+  const frame = useRef(0);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const factor = HOME.width / view.width;
   const level = factor < 1.45 ? 0 : factor < 2.6 ? 1 : 2;
   const unit = view.width / size.width;
 
-  function update(next: View) {
+  function commitView() {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = null;
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+    setView({ ...viewRef.current });
+  }
+
+  function drawGesture() {
+    frame.current = 0;
+    const node = svg.current;
+    if (!node) return;
+    const current = viewRef.current, rendered = renderedView.current;
+    const scale = rendered.width / current.width;
+    const tx = (rendered.x - current.x) * sizeRef.current.width / current.width;
+    const ty = (rendered.y - current.y) * sizeRef.current.height / current.height;
+    // Move an already painted surface on the compositor. Avoid re-rendering the
+    // regional SVG paths and relaying out labels for every mouse event.
+    node.style.transform = `translate3d(${tx}px,${ty}px,0) scale(${scale})`;
+    if (snapshotReady.current && canvas.current) {
+      canvas.current.style.transform = node.style.transform;
+      canvas.current.style.visibility = 'visible';
+      node.style.opacity = '0';
+    }
+    if (root.current) root.current.dataset.moving = 'true';
+    // Refill the overscan before a long drag reaches its edge.
+    if (Math.abs(tx) > OVERSCAN * .85 || Math.abs(ty) > OVERSCAN * .85 || scale > 1.8 || scale < .75) commitView();
+  }
+
+  useLayoutEffect(() => {
+    renderedView.current = view;
+    snapshotReady.current = false;
+    if (svg.current) { svg.current.style.transform = ''; svg.current.style.opacity = ''; }
+    if (canvas.current) { canvas.current.style.visibility = 'hidden'; canvas.current.style.transform = ''; }
+    if (root.current) root.current.dataset.moving = 'false';
+  }, [view]);
+
+  useEffect(() => {
+    const node = svg.current, surface = canvas.current;
+    if (!node || !surface) return;
+    snapshotReady.current = false;
+    const width = size.width + OVERSCAN * 2, height = size.height + OVERSCAN * 2;
+    // Cache the current vector viewport as a retina bitmap. In particular,
+    // non-scaling SVG strokes can otherwise force rasterisation on each move.
+    const clone = node.cloneNode(true) as SVGSVGElement;
+    clone.removeAttribute('style');
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(width)); clone.setAttribute('height', String(height));
+    clone.style.fontFamily = getComputedStyle(node).fontFamily;
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' }));
+    const picture = new Image();
+    let cancelled = false;
+    picture.onload = () => {
+      if (cancelled) return;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      surface.width = Math.ceil(width * ratio); surface.height = Math.ceil(height * ratio);
+      const context = surface.getContext('2d');
+      if (context) {
+        context.drawImage(picture, 0, 0, surface.width, surface.height);
+        snapshotReady.current = true;
+        surface.dataset.ready = 'true';
+        if (pointers.current.size && !frame.current) frame.current = requestAnimationFrame(drawGesture);
+      }
+      URL.revokeObjectURL(url);
+    };
+    surface.dataset.ready = 'false';
+    picture.onerror = () => URL.revokeObjectURL(url);
+    picture.src = url;
+    return () => { cancelled = true; URL.revokeObjectURL(url); };
+  }, [view, size, roads, selectedKey]);
+
+  function update(next: View, interactive = false) {
     const clampCenter = (center: number, length: number, min: number, max: number) => length > max - min ? (min + max) / 2 : Math.max(min + length / 2, Math.min(max - length / 2, center));
     const cx = clampCenter(next.x + next.width / 2, next.width, baseBounds[0], baseBounds[2]);
     const cy = clampCenter(next.y + next.height / 2, next.height, baseBounds[1], baseBounds[3]);
     const bounded = { ...next, x: cx - next.width / 2, y: cy - next.height / 2 };
     viewRef.current = bounded;
-    setView(bounded);
+    if (interactive) {
+      if (!frame.current) frame.current = requestAnimationFrame(drawGesture);
+    } else commitView();
   }
 
-  function zoomAt(amount: number, px: number, py: number) {
+  function zoomAt(amount: number, px: number, py: number, interactive = false) {
     const current = viewRef.current;
     const currentSize = sizeRef.current;
     const width = Math.max(HOME.width / 16, Math.min(HOME.width * 1.7, current.width / amount));
     const height = width * currentSize.height / currentSize.width;
     const fx = px / currentSize.width;
     const fy = py / currentSize.height;
-    update({ width, height, x: current.x + fx * (current.width - width), y: current.y + fy * (current.height - height) });
+    update({ width, height, x: current.x + fx * (current.width - width), y: current.y + fy * (current.height - height) }, interactive);
   }
 
   useImperativeHandle(ref, () => ({
@@ -105,14 +184,25 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
     function wheel(event: WheelEvent) {
       event.preventDefault();
       if (!node) return;
-      const rect = node.getBoundingClientRect();
-      zoomAt(Math.exp(-Math.max(-120, Math.min(120, event.deltaY)) * 0.003), event.clientX - rect.left, event.clientY - rect.top);
+      const rect = root.current!.getBoundingClientRect();
+      zoomAt(Math.exp(-Math.max(-120, Math.min(120, event.deltaY)) * 0.003), event.clientX - rect.left, event.clientY - rect.top, true);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(commitView, 100);
     }
     node?.addEventListener('wheel', wheel, { passive: false });
-    return () => { observer.disconnect(); node?.removeEventListener('wheel', wheel); };
+    return () => {
+      observer.disconnect(); node?.removeEventListener('wheel', wheel);
+      cancelAnimationFrame(frame.current);
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+    };
   }, []);
 
   const projected = useMemo(() => roads.map(road => ({ ...road, points: road.geometry.map(project) })), [roads]);
+  const roadPaths = useMemo(() => projected.map(road => ({
+    ...road,
+    displayPath: path(road.points, level === 0 ? 30 : level === 1 ? 10 : 0),
+    hitPath: path(road.points, 0),
+  })), [projected, level]);
   const junctions = useMemo(() => {
     const nodes = new Map<string, { point: Point; names: Set<string> }>();
     roads.filter(r => !r.approximate).forEach(road => road.geometry.forEach(point => {
@@ -161,7 +251,7 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
   }, [projected, roads, landmarks, level, junctions, selectedKey, view, size, unit]);
 
   return <div className="traffic-map" ref={root} data-testid="traffic-map" data-detail-level={level} data-ready={ready}>
-    <svg ref={svg} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`} preserveAspectRatio="xMidYMid meet" aria-label="钟山景区道路通行地图，可拖动和缩放" tabIndex={0}
+    <svg ref={svg} style={{ left: -OVERSCAN, top: -OVERSCAN, width: `calc(100% + ${OVERSCAN * 2}px)`, height: `calc(100% + ${OVERSCAN * 2}px)`, transformOrigin: `${OVERSCAN}px ${OVERSCAN}px` }} viewBox={`${view.x - OVERSCAN * unit} ${view.y - OVERSCAN * unit} ${view.width + OVERSCAN * unit * 2} ${view.height + OVERSCAN * unit * 2}`} preserveAspectRatio="xMidYMid meet" aria-label="钟山景区道路通行地图，可拖动和缩放" tabIndex={0}
       onKeyDown={event => {
         const current = viewRef.current;
         if (event.key === '+' || event.key === '=') zoomAt(1.6, size.width / 2, size.height / 2);
@@ -173,6 +263,7 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
       }}
       onPointerDown={event => {
         if (event.button !== 0) return;
+        if (settleTimer.current) clearTimeout(settleTimer.current);
         event.currentTarget.setPointerCapture(event.pointerId);
         pointers.current.set(event.pointerId, [event.clientX, event.clientY]);
         gesture.current = { distance: 0, road: (event.target as Element).closest('[data-road-key]')?.getAttribute('data-road-key') ?? '' };
@@ -187,27 +278,29 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
         if (before.length === 2) {
           const oldDistance = Math.hypot(before[0][0] - before[1][0], before[0][1] - before[1][1]);
           const newDistance = Math.hypot(after[0][0] - after[1][0], after[0][1] - after[1][1]);
-          const rect = event.currentTarget.getBoundingClientRect();
-          if (oldDistance > 5) zoomAt(newDistance / oldDistance, (before[0][0] + before[1][0]) / 2 - rect.left, (before[0][1] + before[1][1]) / 2 - rect.top);
+          const rect = root.current!.getBoundingClientRect();
+          if (oldDistance > 5) zoomAt(newDistance / oldDistance, (before[0][0] + before[1][0]) / 2 - rect.left, (before[0][1] + before[1][1]) / 2 - rect.top, true);
         }
         const current = viewRef.current;
         const divisor = before.length === 2 ? 2 : 1;
-        update({ ...current, x: current.x - (event.clientX - old[0]) * current.width / sizeRef.current.width / divisor, y: current.y - (event.clientY - old[1]) * current.height / sizeRef.current.height / divisor });
+        update({ ...current, x: current.x - (event.clientX - old[0]) * current.width / sizeRef.current.width / divisor, y: current.y - (event.clientY - old[1]) * current.height / sizeRef.current.height / divisor }, true);
       }}
       onPointerUp={event => {
         pointers.current.delete(event.pointerId);
         if (gesture.current.distance < 5 && gesture.current.road) onSelect(gesture.current.road);
         gesture.current.road = '';
+        if (!pointers.current.size) commitView();
       }}
-      onPointerCancel={event => { pointers.current.delete(event.pointerId); gesture.current.road = ''; }}>
+      onPointerCancel={event => { pointers.current.delete(event.pointerId); gesture.current.road = ''; if (!pointers.current.size) commitView(); }}
+      onLostPointerCapture={event => { if (pointers.current.delete(event.pointerId)) { gesture.current.road = ''; if (!pointers.current.size) commitView(); } }}>
       <title>钟山景区道路通行地图</title>
       <desc>山林、水面和周边街道与管制道路随网页直接呈现，不依赖外部地图服务。放大后显示步道、建筑和路口。背景道路不代表允许通行，彩色虚线的线位仅供示意。</desc>
       <BaseMap level={level} />
-      {projected.map(road => <g key={road.key} data-road-key={road.key} data-status={road.status}>
+      {roadPaths.map(road => <g key={road.key} data-road-key={road.key} data-status={road.status}>
         <title>{`${road.name}：${road.status}${road.approximate ? '（线位仅示意）' : ''}`}</title>
-        <path d={path(road.points, level === 0 ? 30 : level === 1 ? 10 : 0)} fill="none" stroke="#07111d" strokeWidth={level === 0 ? 7 : 10} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
-        <path className="traffic-road" d={path(road.points, level === 0 ? 30 : level === 1 ? 10 : 0)} fill="none" stroke={road.color} strokeWidth={road.key === selectedKey ? 7 : level === 0 ? 3 : 4.5} strokeDasharray={road.approximate ? '7 8' : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
-        <path d={path(road.points, 0)} fill="none" stroke="transparent" strokeWidth="18" vectorEffect="non-scaling-stroke" />
+        <path d={road.displayPath} fill="none" stroke="#07111d" strokeWidth={level === 0 ? 7 : 10} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+        <path className="traffic-road" d={road.displayPath} fill="none" stroke={road.color} strokeWidth={road.key === selectedKey ? 7 : level === 0 ? 3 : 4.5} strokeDasharray={road.approximate ? '7 8' : undefined} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={road.hitPath} fill="none" stroke="transparent" strokeWidth="18" vectorEffect="non-scaling-stroke" />
       </g>)}
       {level === 2 && junctions.map(node => <circle key={node.key} data-testid="junction-dot" cx={node.point[0]} cy={node.point[1]} r={3.5 * unit} fill="#ecf6fc" stroke="#07111d" strokeWidth={2 * unit} pointerEvents="none" />)}
       {labels.map(label => <g key={`${label.kind}-${label.key}`} pointerEvents="none" data-label-kind={label.kind}>
@@ -217,6 +310,7 @@ export function TrafficMap({ roads, landmarks, selectedKey, onSelect, ref }: {
         <text x={label.point[0]} y={label.y} textAnchor="middle" dominantBaseline="central" fontSize={(label.kind === 'junction' ? 11 : 13) * unit} fontWeight={label.kind === 'place' ? 650 : 450} fill={label.kind === 'place' ? '#ffe0a3' : label.kind === 'water' ? '#9edaff' : ['peak', 'area'].includes(label.kind) ? '#c5dba6' : label.kind === 'junction' ? '#adc4d1' : label.kind === 'road' ? '#f0f4f6' : '#c0cfcd'} stroke="#203335" strokeWidth={4 * unit} paintOrder="stroke" strokeLinejoin="round">{label.text}</text>
       </g>)}
     </svg>
+    <canvas ref={canvas} className="map-drag-cache" aria-hidden="true" style={{ left: -OVERSCAN, top: -OVERSCAN, width: `calc(100% + ${OVERSCAN * 2}px)`, height: `calc(100% + ${OVERSCAN * 2}px)`, transformOrigin: `${OVERSCAN}px ${OVERSCAN}px` }} />
     <div className="map-level" aria-live="polite" data-testid="map-level">{['景区总览', '街道与步道', '建筑与路口'][level]}<span>{Math.max(1, factor).toFixed(1)}× · {['山林 / 水面 / 主干路', '支路 / 步道 / 地铁站', '建筑轮廓 / 台阶 / 路口'][level]}</span></div>
     <div className="map-compass" aria-hidden="true">↑<span>北</span></div>
     <div className="map-zoom-controls">

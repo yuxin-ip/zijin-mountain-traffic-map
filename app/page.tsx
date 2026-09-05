@@ -79,9 +79,9 @@ const STATUS_META: Record<
   exclusive: {
     label: '可通行 · 机动车受限',
     short: '电动车可进',
-    color: '#35e5be',
-    halo: '#0e4f45',
-    text: 'text-[#55e7c6]',
+    color: '#5fc8ff',
+    halo: '#123c59',
+    text: 'text-[#7dd1ff]',
   },
   conditional: {
     label: '按预约路线通行',
@@ -92,10 +92,10 @@ const STATUS_META: Record<
   },
   open: {
     label: '通告未作特别限制',
-    short: '可通行',
-    color: '#5fc8ff',
-    halo: '#123c59',
-    text: 'text-[#7dd1ff]',
+    short: '未作特别限制',
+    color: '#35e5be',
+    halo: '#0e4f45',
+    text: 'text-[#55e7c6]',
   },
   onsite: {
     label: '按现场标志通行',
@@ -215,7 +215,7 @@ function getAccessStatus(
   time: TimeMode,
   vehicle: VehicleMode,
 ): AccessStatus {
-  if (time === 'offpeak') return 'onsite';
+  if (time === 'offpeak') return 'open';
   if (feature.category === 'pedestrian') return 'blocked';
   if (feature.category === 'reference') return 'open';
 
@@ -227,7 +227,10 @@ function getAccessStatus(
   return EBIKE_BAN_NAMES.has(baseName) ? 'blocked' : 'exclusive';
 }
 
-function roadReason(feature: RoadFeature, status: AccessStatus, vehicle: VehicleMode) {
+function roadReason(feature: RoadFeature, status: AccessStatus, vehicle: VehicleMode, time: TimeMode) {
+  if (time === 'offpeak' && status === 'open') {
+    return '通告对本路段未明确规定管控时段外的专项限制，按“未作特别限制”显示；现场标志及临时管控仍优先。';
+  }
   if (feature.category === 'pedestrian' && status !== 'onsite') {
     return '步行道：节假日、双休日禁止所有车辆；工作日仅景区接驳车和残疾人机动轮椅车可通行。';
   }
@@ -291,6 +294,12 @@ export default function Home() {
         return order.indexOf(a.status) - order.indexOf(b.status);
       });
   }, [timeMode, vehicleMode]);
+
+  const mapRoads = useMemo(() => FEATURES.map(feature => ({
+    ...feature,
+    color: STATUS_META[getAccessStatus(feature, timeMode, vehicleMode)].color,
+    status: STATUS_META[getAccessStatus(feature, timeMode, vehicleMode)].label,
+  })), [timeMode, vehicleMode]);
 
   const counts = useMemo(() => {
     return roadGroups.reduce(
@@ -411,11 +420,7 @@ export default function Home() {
         <section className="map-panel relative min-h-[56vh] overflow-hidden border-white/10 lg:min-h-0 lg:border-r">
           <TrafficMap
             ref={mapRef}
-            roads={FEATURES.map(feature => ({
-              ...feature,
-              color: STATUS_META[getAccessStatus(feature, timeMode, vehicleMode)].color,
-              status: STATUS_META[getAccessStatus(feature, timeMode, vehicleMode)].label,
-            }))}
+            roads={mapRoads}
             landmarks={LANDMARKS}
             selectedKey={selectedRoad?.key}
             onSelect={key => setSelectedRoad(FEATURES.find(feature => feature.key === key) ?? null)}
@@ -427,7 +432,7 @@ export default function Home() {
               {(vehicleMode === 'ebike' || vehicleMode === 'bike') &&
                 timeMode !== 'offpeak' && (
                   <div className="flex items-center gap-2">
-                    <span className="h-3 w-7 rounded-full bg-[#35e5be] shadow-[0_0_10px_rgba(53,229,190,.45)]" />
+                    <span className="h-3 w-7 rounded-full" style={{ backgroundColor: STATUS_META.exclusive.color }} />
                     <span>可骑入 · 机动车受限</span>
                   </div>
                 )}
@@ -444,8 +449,8 @@ export default function Home() {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <span className={`h-3 w-7 rounded-full ${timeMode === 'offpeak' ? 'bg-slate-400' : 'bg-[#5fc8ff]'}`} />
-                <span>{timeMode === 'offpeak' ? '现场为准' : '未作特别限制'}</span>
+                <span className="h-3 w-7 rounded-full" style={{ backgroundColor: STATUS_META.open.color }} />
+                <span>未作特别限制</span>
               </div>
             </div>
             <p className="mt-2 border-t border-white/10 pt-2 text-[11px] text-slate-400">灰色街道、细虚线步道是地理背景，不表示允许车辆通行。</p>
@@ -481,7 +486,7 @@ export default function Home() {
                 </button>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                {roadReason(selectedRoad, selectedStatus, vehicleMode)}
+                {roadReason(selectedRoad, selectedStatus, vehicleMode, timeMode)}
               </p>
             </div>
           )}
@@ -508,7 +513,7 @@ export default function Home() {
                 <p className="mt-0.5 text-xs text-slate-400">禁行道路</p>
               </div>
               <div className="rounded-xl border border-white/8 bg-white/[0.035] p-3">
-                <p className="text-xl font-semibold text-[#4fe7c5]">
+                <p className={`text-xl font-semibold ${vehicleMode === 'reservedCar' ? 'text-[#ffc766]' : 'text-[#76ceff]'}`}>
                   {counts.exclusive || counts.conditional}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">
@@ -516,7 +521,7 @@ export default function Home() {
                 </p>
               </div>
               <div className="rounded-xl border border-white/8 bg-white/[0.035] p-3">
-                <p className="text-xl font-semibold text-[#76ceff]">
+                <p className="text-xl font-semibold text-[#4fe7c5]">
                   {counts.open || counts.onsite}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">其他参考</p>
