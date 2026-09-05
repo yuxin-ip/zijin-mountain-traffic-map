@@ -28,14 +28,17 @@ const styles: Record<string, { fill?: string; stroke?: string; width?: number; d
 const order = Object.keys(styles);
 const layers = [...data.layers].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 
-export const BaseMap = memo(function BaseMap({ level }: { level: number }) {
+export const BaseMap = memo(function BaseMap({ level, bounds }: { level: number; bounds: number[] }) {
   return <g data-testid="base-map" pointerEvents="none" aria-label="内置地理底图：山林、水面、街道、步道与建筑">
     <rect x={baseBounds[0]} y={baseBounds[1]} width={baseBounds[2] - baseBounds[0]} height={baseBounds[3] - baseBounds[1]} fill="#28373a" />
     {layers.filter(layer => layer.level <= level).map(layer => {
       const style = styles[layer.kind];
-      return <g key={`${layer.kind}-${layer.level}`} data-base-kind={layer.kind} data-feature-count={layer.count}>
-        {['major', 'street'].includes(layer.kind) && <path d={layer.d} fill="none" stroke="#253331" strokeWidth={(style.width ?? 1) + 2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
-        <path d={layer.d} fill={style.fill ?? 'none'} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+      const chunks = layer.chunks.filter(chunk => chunk.bounds[0] <= bounds[2] && chunk.bounds[2] >= bounds[0] && chunk.bounds[1] <= bounds[3] && chunk.bounds[3] >= bounds[1]);
+      // Preserve complete polygons (including holes) while excluding offscreen cells.
+      const d = chunks.map(chunk => chunk.d).join('');
+      return <g key={`${layer.kind}-${layer.level}`} data-base-kind={layer.kind} data-feature-count={layer.count} data-rendered-count={chunks.reduce((n, c) => n + c.count, 0)}>
+        {['major', 'street'].includes(layer.kind) && <path d={d} fill="none" stroke="#253331" strokeWidth={(style.width ?? 1) + 2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
+        <path d={d} fill={style.fill ?? 'none'} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
       </g>;
     })}
   </g>;

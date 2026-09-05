@@ -51,8 +51,15 @@ const layers = new Map();
 const labels = new Map();
 function add(kind, level, d, count = 1) {
   const key = `${kind}-${level}`;
-  const layer = layers.get(key) || { kind, level, d: '', count: 0 };
-  layer.d += d; layer.count += count; layers.set(key, layer);
+  const layer = layers.get(key) || { kind, level, chunks: new Map(), count: 0 };
+  const points = [...d.matchAll(/[ML](-?[\d.]+),(-?[\d.]+)/g)].map(m => [Number(m[1]), Number(m[2])]);
+  const b = [Math.min(...points.map(p => p[0])), Math.min(...points.map(p => p[1])), Math.max(...points.map(p => p[0])), Math.max(...points.map(p => p[1]))];
+  const cell = `${Math.floor((b[0] + b[2]) / 1200)},${Math.floor((b[1] + b[3]) / 1200)}`;
+  const chunk = layer.chunks.get(cell) || { key: cell, d: '', bounds: b, count: 0 };
+  chunk.d += d; chunk.count += count;
+  chunk.bounds = [Math.min(chunk.bounds[0], b[0]), Math.min(chunk.bounds[1], b[1]), Math.max(chunk.bounds[2], b[2]), Math.max(chunk.bounds[3], b[3])];
+  layer.chunks.set(cell, chunk);
+  layer.count += count; layers.set(key, layer);
 }
 function addLabel(e, points, kind, level, weight = 0) {
   const name = e.tags?.['name:zh'] || e.tags?.name;
@@ -121,7 +128,7 @@ const data = {
   timestamp: source.osm3s.timestamp_osm_base,
   bbox: [32.015, 118.785, 32.115, 118.925], bounds,
   projection: 'x=(longitude-118.8)*94300; y=(32.07-latitude)*111320; metres',
-  layers: [...layers.values()],
+  layers: [...layers.values()].map(layer => ({ ...layer, chunks: [...layer.chunks.values()] })),
   labels: [...labels.values()].map(({ weight, ...label }) => label),
 };
 for (const kind of ['forest', 'water', 'building', 'major', 'street', 'trail']) assert(data.layers.some(l => l.kind === kind && l.count > 10), `Missing ${kind}`);
@@ -130,4 +137,4 @@ fs.mkdirSync('public/data', { recursive: true });
 // Publish an identical downloadable copy to satisfy the data licence.
 fs.writeFileSync('app/data/basemap.json', JSON.stringify(data));
 fs.writeFileSync('public/data/basemap.json', JSON.stringify(data));
-console.log(JSON.stringify({ bytes: fs.statSync('public/data/basemap.json').size, layers: data.layers.map(({ d, ...l }) => l), labels: data.labels.length, timestamp: data.timestamp }, null, 2));
+console.log(JSON.stringify({ bytes: fs.statSync('public/data/basemap.json').size, layers: data.layers.map(({ chunks, ...l }) => ({ ...l, chunks: chunks.length })), labels: data.labels.length, timestamp: data.timestamp }, null, 2));

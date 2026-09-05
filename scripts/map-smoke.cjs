@@ -20,6 +20,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       junctions: node.querySelectorAll('[data-testid="junction-dot"]').length,
       baseKinds: [...new Set([...node.querySelectorAll('[data-base-kind]')].map(n => n.dataset.baseKind))],
       baseFeatures: [...node.querySelectorAll('[data-base-kind]')].reduce((sum, n) => sum + Number(n.dataset.featureCount), 0),
+      renderedFeatures: [...node.querySelectorAll('[data-base-kind]')].reduce((sum, n) => sum + Number(n.dataset.renderedCount || n.dataset.featureCount), 0),
       box: { width: node.clientWidth, height: node.clientHeight },
       view: node.querySelector('svg').getAttribute('viewBox'),
     }));
@@ -40,6 +41,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(detail.junctions > 0, 'Close-up should reveal intersections');
     assert(detail.baseKinds.includes('building') && detail.baseKinds.includes('steps'), 'Close-up must include building outlines and steps');
     assert(detail.baseFeatures > streets.baseFeatures, 'Detail zoom must add geographic features');
+    assert(detail.renderedFeatures < detail.baseFeatures / 3, 'Close-up must not render the entire regional database');
     await page.screenshot({ path: 'artifacts/map-detail.png', fullPage: true });
     await page.getByRole('button', { name: '缩小地图', exact: true }).click();
     assert.equal((await state()).level, '1');

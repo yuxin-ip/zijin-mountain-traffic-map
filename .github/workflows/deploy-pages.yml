@@ -40,6 +40,7 @@ jobs:
         run: |
           node scripts/serve-static.cjs &
           TEST_URL=http://127.0.0.1:4173/zijin-mountain-traffic-map/ node scripts/map-smoke.cjs
+          TEST_URL=http://127.0.0.1:4173/zijin-mountain-traffic-map/ node scripts/map-mobile.cjs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

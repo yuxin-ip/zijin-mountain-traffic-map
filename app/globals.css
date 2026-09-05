@@ -104,8 +104,8 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-.map-panel { min-height: 520px; }
-.traffic-map { position: absolute; inset: 0; overflow: hidden; background: #0b1623; }
+.map-panel { min-height: 520px; touch-action: none; overscroll-behavior: contain; }
+.traffic-map { position: absolute; inset: 0; overflow: hidden; background: #0b1623; touch-action: none; overscroll-behavior: contain; -webkit-user-select: none; user-select: none; }
 .traffic-map > svg { position: absolute; display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; will-change: transform; }
 .traffic-map > svg:active { cursor: grabbing; }
 .map-drag-cache { position: absolute; pointer-events: none; visibility: hidden; will-change: transform; }
